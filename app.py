@@ -4,25 +4,26 @@ import numpy as np
 import random
 from datetime import datetime
 import pandas as pd
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="MedVision - 1 Patient 3 Reports", layout="wide")
-st.title("🏥 MedVision - 1 Patient, 3 Reports - Fracture Check")
+st.set_page_config(page_title="MedVision - Final + Graphs", layout="wide")
+st.title("🏥 MedVision - Scan Type + Graphs + Red Box")
 
-# === ONE PATIENT DETAILS ===
-st.sidebar.header("📋 One Patient Details")
-patient_id = st.sidebar.text_input("Patient ID / Name", "PAT-001")
+# === ONE PATIENT ===
+st.sidebar.header("📋 Patient Details")
+patient_id = st.sidebar.text_input("Patient ID", "PAT-001")
 age = st.sidebar.number_input("Age", 1, 120, 25)
 gender = st.sidebar.selectbox("Gender", ["Male", "Female", "Other"])
-notes = st.sidebar.text_area("Patient Notes", "Pain after fall, swelling in left forearm, unable to lift")
-pain = st.sidebar.slider("Pain Level", 0, 10, 6)
+notes = st.sidebar.text_area("Notes", "Pain after fall")
 
 st.sidebar.divider()
-st.sidebar.caption("Upload 3 reports for SAME patient - e.g., Front, Side, Top view")
+st.sidebar.header("🩻 Select Type of Scan Report")
+scan_type = st.sidebar.selectbox("Scan Type", ["X-Ray (Bone)", "MRI (Brain/Spine)", "CT Scan (Chest/Head)", "Ultrasound"])
+scan_region = st.sidebar.selectbox("Region", ["Forearm", "Leg", "Chest", "Head", "Spine", "Hand", "Other"])
+view_type = st.sidebar.selectbox("View Type", ["AP View", "Lateral View", "Oblique View", "Multiple Views"])
 
-# === 3 REPORTS FOR SAME PATIENT ===
-st.subheader("📤 Upload 3 Reports for SAME Patient")
 uploaded_files = st.file_uploader(
-    "Select 3 Images for ONE Patient (Ctrl+Select 3)",
+    f"📤 Upload Any Number of {scan_type} Reports for {patient_id} (As you wish)",
     type=["jpg","jpeg","png"],
     accept_multiple_files=True
 )
@@ -47,34 +48,29 @@ def find_defect(image):
     if max_std < 18: pct = random.uniform(0,1.8)
     conf = 92 if max_std>28 else 74 if max_std>19 else 42
     is_frac = pct > 25 and max_std > 20
-    if is_frac:
-        frac_type = "Displaced Fracture" if pct>65 else "Compound Fracture" if pct>40 else "Hairline Fracture"
-    else:
-        frac_type = "No Fracture"
+    frac_type = "No Fracture" if not is_frac else ("Displaced" if pct>65 else "Compound" if pct>40 else "Hairline")
     return (x1,y1,x2,y2), pct, conf+random.uniform(-3,3), max_std, is_frac, frac_type
 
-def precautions(pct, is_frac, age):
-    if not is_frac:
-        return ["✅ No Fracture in this view", "Rest, follow up if pain persists"]
-    elif pct < 40:
-        return ["⚠️ Hairline Fracture - Precautions", "1. Sling/bandage", "2. Ice 15min/2hrs", "3. No weight 2 weeks", "4. Calcium + Vit D", f"5. Age {age}: Special care"]
-    elif pct < 65:
-        return ["🚨 Compound Fracture", "1. Plaster needed", "2. Doctor within 24hrs", "3. No weight", "4. Physio later"]
+def precautions(pct, is_frac, age, scan_type):
+    if not is_frac: return ["✅ Normal", "No major precautions"]
+    if "X-Ray" in scan_type:
+        return [f"🦴 {pct:.1f}% Fracture", "1. Sling/Plaster", "2. Ice 15min/2hrs", "3. No weight", "4. Calcium + Vit D"]
+    elif "MRI" in scan_type:
+        return [f"🧠 {pct:.1f}% Soft Tissue Lesion", "1. Rest, no strain", "2. Physiotherapy", "3. MRI follow up"]
+    elif "CT" in scan_type:
+        return [f"🫁 {pct:.1f}% CT Finding", "1. Doctor consult 24hrs", "2. Avoid radiation repeat", "3. Blood test"]
     else:
-        return ["🆘 Displaced Fracture - EMERGENCY", "1. Hospital now", "2. Surgery may need", "3. Complete rest"]
+        return [f"⚠️ {pct:.1f}% Ultrasound Finding", "1. Rest", "2. Repeat USG after 1 week"]
 
 if uploaded_files:
-    if len(uploaded_files)!= 3:
-        st.warning(f"⚠️ You uploaded {len(uploaded_files)} reports. Please upload exactly 3 reports for 1 patient for best result. (You can still continue)")
-
-    st.success(f"✅ {len(uploaded_files)} Reports for Patient {patient_id} (Age {age}) - Analyzing...")
+    n = len(uploaded_files)
+    st.success(f"✅ {n} {scan_type} Reports for Patient {patient_id} | Region: {scan_region} | View: {view_type}")
 
     results = []
     for idx, file in enumerate(uploaded_files):
         orig = Image.open(file).convert("RGB")
         (x1,y1,x2,y2), pct, conf, std, is_frac, frac_type = find_defect(orig)
 
-        # === RED BOX ON DEFECT POSITION ===
         rgba = orig.convert("RGBA")
         overlay = Image.new('RGBA', rgba.size, (0,0,0,0))
         draw = ImageDraw.Draw(overlay)
@@ -83,13 +79,13 @@ if uploaded_files:
         draw.rectangle([x1,y1,x2,y2], fill=fill)
         for t in range(5):
             draw.rectangle([x1-t, y1-t, x2+t, y2+t], outline=color)
-        draw.rectangle([x1, y1-26, x1+200, y1], fill=color)
+        draw.rectangle([x1, y1-26, x1+220, y1], fill=color)
         draw.text((x1+6, y1-20), f"{frac_type} {pct:.1f}%", fill=(255,255,255,255))
         marked = Image.alpha_composite(rgba, overlay).convert("RGB")
         defect_only = orig.crop((x1,y1,x2,y2))
 
         results.append({
-            "report_no": f"Report {idx+1}",
+            "no": idx+1,
             "file": file.name,
             "orig": orig,
             "marked": marked,
@@ -101,92 +97,112 @@ if uploaded_files:
             "frac_type": frac_type
         })
 
-    # === FINAL ANSWER - ONE PATIENT HAS FRACTURE OR NOT ===
+    # === FINAL RESULT ===
     st.divider()
-    st.subheader(f"🚨 FINAL RESULT for Patient {patient_id} (Age {age})")
-
-    fractured_reports = [r for r in results if r['is_frac']]
-
-    if fractured_reports:
-        st.error(f"### 🔴 Patient {patient_id} HAS FRACTURED - Found in {len(fractured_reports)} out of {len(results)} Reports")
-        for r in fractured_reports:
-            st.write(f"**→ {r['report_no']} ({r['file']}) : {r['frac_type']} - {r['pct']:.1f}% - RED BOX at {r['box']} - Confidence I'm {r['conf']:.0f}% sure**")
-
-        normal_reports = [r for r in results if not r['is_frac']]
-        if normal_reports:
-            st.info(f"Other {len(normal_reports)} report(s) show normal - fracture visible only in specific view")
+    fractured = [r for r in results if r['is_frac']]
+    if fractured:
+        st.error(f"### 🔴 Patient {patient_id} HAS FRACTURED - {len(fractured)}/{n} Reports - {scan_type} {scan_region}")
+        for r in fractured:
+            st.write(f"**→ Report {r['no']} ({r['file']}) = {r['frac_type']} {r['pct']:.1f}% at RED BOX {r['box']}**")
     else:
-        st.success(f"### 🟢 Patient {patient_id} - NO FRACTURE in any of {len(results)} Reports - All 3 Normal")
+        st.success(f"### 🟢 Patient {patient_id} - NO FRACTURE in {n} {scan_type} Reports")
 
-    # Comparison table
-    st.subheader("📊 3 Reports Comparison - Same Patient")
+    # === GRAPHS RELATED TO REPORT ===
+    st.divider()
+    st.subheader(f"📊 Graphs Related to {scan_type} Report - Patient {patient_id}")
+
+    # Data for graphs
+    report_labels = [f"R{r['no']}" for r in results]
+    pcts = [r['pct'] for r in results]
+    confs = [r['conf'] for r in results]
+    colors = ['red' if r['is_frac'] else 'green' for r in results]
+
+    g1,g2 = st.columns(2)
+
+    with g1:
+        # Graph 1: Defect % Bar Chart
+        fig, ax = plt.subplots()
+        ax.bar(report_labels, pcts, color=colors)
+        ax.set_title(f"Defect % per Report - {scan_type}")
+        ax.set_ylabel("Defect %")
+        ax.set_xlabel("Reports")
+        for i, v in enumerate(pcts):
+            ax.text(i, v+1, f"{v:.1f}%", ha='center', fontweight='bold')
+        ax.set_ylim(0, 100)
+        st.pyplot(fig)
+
+        # Graph 2: Confidence Graph
+        fig2, ax2 = plt.subplots()
+        ax2.plot(report_labels, confs, marker='o', linewidth=3, markersize=10)
+        ax2.set_title("Confidence % - I'm X% Sure")
+        ax2.set_ylabel("Confidence %")
+        ax2.grid(True, alpha=0.3)
+        for i, v in enumerate(confs):
+            ax2.text(i, v+1, f"{v:.0f}%", ha='center')
+        st.pyplot(fig2)
+
+    with g2:
+        # Graph 3: Pie Chart Fractured vs Normal
+        fig3, ax3 = plt.subplots()
+        frac_count = len(fractured)
+        norm_count = n - frac_count
+        ax3.pie([frac_count, norm_count], labels=[f'Fractured {frac_count}', f'Normal {norm_count}'], 
+                colors=['red','green'], autopct='%1.0f%%', startangle=90, explode=(0.1,0))
+        ax3.set_title(f"Fractured vs Normal - {n} Reports")
+        st.pyplot(fig3)
+
+        # Graph 4: Severity Line Graph
+        fig4, ax4 = plt.subplots()
+        ax4.fill_between(report_labels, pcts, alpha=0.3, color='red')
+        ax4.plot(report_labels, pcts, color='red', linewidth=3, marker='s')
+        ax4.axhline(y=25, color='orange', linestyle='--', label='Fracture Threshold 25%')
+        ax4.axhline(y=65, color='darkred', linestyle='--', label='Critical 65%')
+        ax4.set_title(f"Severity Trend Across Reports - {scan_region}")
+        ax4.set_ylabel("Defect %")
+        ax4.legend()
+        st.pyplot(fig4)
+
+    # Table
+    st.subheader("📋 Detailed Table with Graphs Data")
     df = pd.DataFrame([{
-        "Report": r['report_no'],
+        "Report": f"R{r['no']}",
         "File": r['file'],
-        "Defect %": f"{r['pct']:.1f}%",
-        "Red Box Position": f"{r['box']}",
+        "Scan Type": scan_type,
+        "Region": scan_region,
+        "Defect %": round(r['pct'],1),
+        "Red Box": str(r['box']),
         "Fractured?": "YES 🔴" if r['is_frac'] else "NO 🟢",
-        "Fracture Type": r['frac_type'],
-        "Confidence": f"{r['conf']:.0f}%"
+        "Type": r['frac_type'],
+        "Confidence": round(r['conf'],0)
     } for r in results])
     st.dataframe(df, use_container_width=True)
+    st.bar_chart(df.set_index("Report")[["Defect %"]])
 
-    # Show each report with RED BOX
-    for i, r in enumerate(results):
+    # Each report with red box
+    for r in results:
         st.divider()
-        if r['is_frac']:
-            st.markdown(f"#### 🔴 {r['report_no']} ({r['file']}) - FRACTURED: {r['frac_type']} - Red Box at {r['box']}")
-        else:
-            st.markdown(f"#### 🟢 {r['report_no']} ({r['file']}) - NORMAL")
-
+        st.markdown(f"#### {'🔴' if r['is_frac'] else '🟢'} Report {r['no']}: {r['file']} - {r['frac_type']} - {scan_type} - RED BOX {r['box']}")
         c1,c2,c3 = st.columns(3)
-        with c1:
-            st.image(r['orig'], caption=f"Original - {r['report_no']}", use_column_width=True)
-        with c2:
-            st.image(r['marked'], caption=f"{'🔴 RED BOX - DEFECT POSITION' if r['is_frac'] else '🟢 GREEN BOX - NORMAL'}", use_column_width=True)
-        with c3:
-            st.image(r['defect'], caption="SEPARATE Defect Position Image", use_column_width=True)
+        with c1: st.image(r['orig'], caption="1. Original", use_column_width=True)
+        with c2: st.image(r['marked'], caption=f"2. RED BOX ON DEFECT {r['pct']:.1f}%", use_column_width=True)
+        with c3: 
+            st.image(r['defect'], caption="3. SEPARATE Defect Image", use_column_width=True)
             zoom = r['defect'].resize((r['defect'].width*4, r['defect'].height*4), Image.NEAREST)
-            st.image(zoom, caption="Zoomed 4x - Defect Only", use_column_width=True)
+            st.image(zoom, caption="Zoomed 4x", use_column_width=True)
 
-        st.write(f"**Precautions for {r['report_no']}:**")
-        for p in precautions(r['pct'], r['is_frac'], age):
-            st.write(p)
-
-    # Combined report
-    st.divider()
-    st.subheader("📄 Combined Report for 1 Patient - 3 Views")
-    avg_pct = np.mean([r['pct'] for r in results])
-    max_r = max(results, key=lambda x: x['pct'])
-    st.code(f"""
-Date: {datetime.now().strftime('%d-%m-%Y %H:%M')}
-Patient: {patient_id} | Age: {age} | Gender: {gender}
-Notes: {notes} | Pain: {pain}/10
-
-TOTAL REPORTS: {len(results)} for SAME patient
-
-FINDING: Doctor, consider:
-{chr(10).join([f"- {r['report_no']} ({r['file']}): RED BOX at {r['box']} - {r['frac_type']} {r['pct']:.1f}% - I'm {r['conf']:.0f}% sure" for r in results])}
-
-FINAL: Patient {patient_id} {'HAS FRACTURED - ' + max_r['frac_type'] + ' in ' + max_r['report_no'] if fractured_reports else 'NO FRACTURE'}
-
-Average Defect: {avg_pct:.1f}% | Worst: {max_r['report_no']} {max_r['pct']:.1f}%
-
-Precautions based on worst report {max_r['report_no']}:
-{chr(10).join(precautions(max_r['pct'], max_r['is_frac'], age))}
-
-Helper only - Final by doctor.
-""")
+        for p in precautions(r['pct'], r['is_frac'], age, scan_type):
+            st.write(f"- {p}")
 
 else:
-    st.info("👆 Upload 3 reports for ONE patient - Example: `patient_ap.jpg`, `patient_lateral.jpg`, `patient_oblique.jpg`")
+    st.info(f"👆 Select Scan Type ({scan_type}) + Upload any number of reports as you wish")
     st.markdown("""
-    **Example Output:**
-    > Patient PAT-001, Age 25
-    > 🔴 HAS FRACTURED
-    > → Report 2 (lateral.jpg): Hairline Fracture 48.2% at Red Box [120,340] - Confidence 87%
-    > → Report 1 & 3: Normal
+    **Graphs you get:**
+    1. **Bar Chart**: Defect % per report (Red=Fracture, Green=Normal)
+    2. **Line Graph**: Confidence % (I'm X% sure)
+    3. **Pie Chart**: Fractured vs Normal %
+    4. **Severity Trend**: Line + threshold + fill
+    5. **Table + Bar Chart**: Built-in
 
-    **Each report shows:**
-    - Original | RED BOX ON DEFECT POSITION | SEPARATE Defect Image (cropped)
+    **Example:**
+    Upload 3 X-Ray Forearm -> Graph shows Report 2 has 48% fracture, others 1% normal
     """)
