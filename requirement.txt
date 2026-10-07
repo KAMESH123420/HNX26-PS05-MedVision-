@@ -1,3 +1,5 @@
 streamlit
+PyMuPDF
 Pillow
 numpy
+pandas
