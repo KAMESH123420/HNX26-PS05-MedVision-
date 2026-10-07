@@ -1,6 +1,3 @@
-torch
-ultralytics
-opencv-python
-transformers
-matplotlib
-numpy
+streamlit==1.39.0
+Pillow==10.4.0
+numpy==1.26.4
